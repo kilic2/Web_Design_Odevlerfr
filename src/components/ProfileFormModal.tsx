@@ -1,248 +1,268 @@
 import {
-  Button,
-  Label,
-  Modal,
-  ModalBody,
-  ModalHeader,
-  Select,
-  TextInput,
+    Button,
+    Label,
+    Modal,
+    ModalBody,
+    ModalHeader,
+    TextInput,
+    FileInput
 } from "flowbite-react";
-import { useEffect, useState } from "react";
-import { showErrors } from "../helper/helper";
-import type { Profile, ProfileType } from "../types/Profile";
-import { FaEdit, FaPlus } from "react-icons/fa";
+import { useState, useEffect } from "react";
 import { api } from "../helper/api";
 import { toast } from "sonner";
 
 interface Props {
-  fetchProfiles: () => void;
-  profile: Profile | null;
+    show: boolean;
+    setShow: (show: boolean) => void;
+    loginType: boolean;
+    onLoginSuccess: (userId: number) => void;
 }
 
-export const ProfileFormModal = ({ fetchProfiles, profile }: Props) => {
-  const [show, setShow] = useState(false);
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [rpPassword, setRpPassword] = useState("");
-  const [profileTypeId, setProfileTypeId] = useState("");
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string>("");
-  const [types, setTypes] = useState<ProfileType[]>([]);
+interface Tag {
+    id: number;
+    name: string;
+}
 
-  useEffect(() => {
-    if (show) {
-      api.get("profileTypes")
-        .then((res) => {
-          setTypes(res.data);
-          if (!profile && res.data.length > 0 && profileTypeId === "") {
-            setProfileTypeId(res.data[0].id.toString());
-          }
-        })
-        .catch(() => toast.error("Tipler yüklenemedi"));
-    }
-  }, [show]);
+export const ProfileFormModal = ({ show, setShow, loginType, onLoginSuccess }: Props) => {
+    const [username, setUsername] = useState("");
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [rpPassword, setRpPassword] = useState("");
+    const [selectedTags, setSelectedTags] = useState<number[]>([]);
+    const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+    const [loadingTags, setLoadingTags] = useState(false);
+    const [photo, setPhoto] = useState<File | null>(null);
 
-  useEffect(() => {
-    if (profile) {
-      setUsername(profile.username);
-      setEmail(profile.email);
-      setProfileTypeId(profile.profileTypeId ? profile.profileTypeId.toString() : "");
-      setPassword("");
-      setRpPassword("");
-      setPhoto(null);
-      setPhotoPreview(profile.photo || "");
-    } else {
-      setUsername("");
-      setEmail("");
-      setPassword("");
-      setRpPassword("");
-      setProfileTypeId("");
-      setPhoto(null);
-      setPhotoPreview("");
-    }
-  }, [profile, show]);
-
-  function handleSave() {
-    console.log("handleSave called", { username, email, password, profileTypeId });
-    
-    if (!username || !email) {
-      toast.error("Kullanıcı adı ve email gerekli");
-      return;
-    }
-    
-    if (!profileTypeId) {
-      toast.error("Profil tipi seçiniz");
-      return;
-    }
-    
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
-    
-    if (!profile) {
-      if (!password || !rpPassword) {
-        toast.error("Şifre gerekli");
-        return;
-      }
-      if (password !== rpPassword) {
-        toast.error("Şifreler eşleşmiyor");
-        return;
-      }
-      if (!passwordRegex.test(password)) {
-        toast.error("Şifre en az 8 karakter olmalı ve en az 1 büyük harf, 1 küçük harf, 1 sayı ve 1 sembol içermelidir.");
-        return;
-      }
-    } else {
-      if (password.trim() !== "" || rpPassword.trim() !== "") {
-        if (password !== rpPassword) {
-          toast.error("Şifreler eşleşmiyor");
-          return;
+    useEffect(() => {
+        if (show && !loginType) {
+            fetchTags();
         }
-        if (!passwordRegex.test(password)) {
-          toast.error("Şifre en az 8 karakter olmalı ve en az 1 büyük harf, 1 küçük harf, 1 sayı ve 1 sembol içermelidir.");
-          return;
+    }, [show, loginType]);
+
+    const fetchTags = async () => {
+        setLoadingTags(true);
+        try {
+            const response = await api.get('/tag');
+            setAvailableTags(response.data);
+        } catch (error) {
+            console.error(error);
+            toast.error('İlgi alanları yüklenemedi');
+        } finally {
+            setLoadingTags(false);
         }
-      }
-    }
-    
-    const formData = new FormData();
-    formData.append("username", username);
-    formData.append("email", email);
-    formData.append("profileTypeId", profileTypeId);
-    
-    if (photo) {
-      formData.append("photo", photo);
+    };
+
+    const toggleTag = (tagId: number) => {
+        setSelectedTags(prev =>
+            prev.includes(tagId)
+                ? prev.filter(id => id !== tagId)
+                : [...prev, tagId]
+        );
+    };
+
+    function handleSave() {
+        if (loginType) {
+            if (!username || !password) {
+                toast.error("Kullanıcı adı ve şifre gerekli");
+                return;
+            }
+
+            api.get("/profiles")
+                .then((response) => {
+                    const users = response.data;
+                    const foundUser = users.find((u: any) => u.username === username && u.password === password);
+
+                    if (foundUser) {
+                        toast.success("Giriş başarılı");
+                        onLoginSuccess(foundUser.id);
+                        resetForm();
+                        setShow(false);
+                    } else {
+                        toast.error("Kullanıcı adı veya şifre hatalı");
+                    }
+                })
+                .catch((err) => {
+                    toast.error("Giriş işlemi başarısız");
+                });
+        } else {
+            if (!username || !email || !password) {
+                toast.error("Tüm alanlar gerekli");
+                return;
+            }
+
+            if (password !== rpPassword) {
+                toast.error("Şifreler eşleşmiyor");
+                return;
+            }
+
+            if (selectedTags.length === 0) {
+                toast.error("En az bir ilgi alanı seçmelisiniz");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("username", username);
+            formData.append("email", email);
+            formData.append("password", password);
+            formData.append("rpPassword", rpPassword);
+            formData.append("profileTypeId", "1");
+
+            if (photo) {
+                formData.append("photo", photo);
+            }
+
+            selectedTags.forEach(tagId => {
+                formData.append("tagIds", tagId.toString());
+            });
+
+            api.post("/profiles", formData, {
+                headers: {
+                    "Content-Type": "multipart/form-data",
+                },
+            })
+                .then((response) => {
+                    toast.success("Kaydol başarılı");
+                    onLoginSuccess(response.data.id);
+                    resetForm();
+                    setShow(false);
+                })
+                .catch((err) => {
+                    const msg = err.response?.data?.message || "Kaydol başarısız";
+                    toast.error(Array.isArray(msg) ? msg[0] : msg);
+                });
+        }
     }
 
-    if (profile) {
-      if (password.trim() !== "" && rpPassword.trim() !== "") {
-        formData.append("password", password);
-        formData.append("rpPassword", rpPassword);
-      } else {
-        formData.append("password", "");
-        formData.append("rpPassword", "");
-      }
-    } else {
-      formData.append("password", password);
-      formData.append("rpPassword", rpPassword);
-    }
+    const resetForm = () => {
+        setUsername("");
+        setEmail("");
+        setPassword("");
+        setRpPassword("");
+        setSelectedTags([]);
+        setPhoto(null);
+    };
 
-    console.log("Sending to API");
-    console.log("FormData contents:");
-    for (let pair of formData.entries()) {
-      console.log(pair[0] + ': ' + pair[1]);
-    }
-    
-    if (profile) {
-      api.patch("profiles/" + profile.id, formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      })
-        .then((response) => { 
-          console.log("Update response:", response);
-          fetchProfiles(); 
-          toast.success("Güncellendi"); 
-          setShow(false); 
-        })
-        .catch((err) => { 
-          console.error("Update error:", err);
-          console.error("Error response:", err.response);
-          showErrors(err); 
-        });
-    } else {
-      api.post("profiles", formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      })
-        .then(() => { 
-          fetchProfiles(); 
-          toast.success("Eklendi"); 
-          setShow(false); 
-        })
-        .catch((err) => { 
-          console.error("Create error:", err); 
-          showErrors(err); 
-        });
-    }
-  }
+    return (
+        <Modal show={show} size="lg" onClose={() => {
+            resetForm();
+            setShow(false);
+        }} popup>
+            <ModalHeader>
+                {loginType ? "Giriş Yap" : "Kaydol"}
+            </ModalHeader>
+            <ModalBody>
+                <div className="space-y-6">
+                    <div>
+                        <div className="mb-2 block">
+                            <Label htmlFor="u">Kullanıcı Adı</Label>
+                        </div>
+                        <TextInput
+                            id="u"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                        />
+                    </div>
 
-  return (
-    <>
-      <div className="flex">
-        {profile ? (
-          <Button size="xs" color="green" onClick={() => setShow(true)}><FaEdit /></Button>
-        ) : (
-          <Button color="dark" className="ml-auto mb-2" onClick={() => setShow(true)}><FaPlus className="mr-2"/> Yeni Ekle</Button>
-        )}
-      </div>
-      <Modal show={show} size="md" onClose={() => setShow(false)} popup>
-        <ModalHeader>
-          {profile ? "Düzenle" : "Yeni Ekle"}
-        </ModalHeader>
-        <ModalBody>
-          <div className="space-y-6">
-            <div>
-              <div className="mb-2 block">
-                <Label htmlFor="u">Kullanıcı Adı</Label>
-              </div>
-              <TextInput id="u" value={username} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)} />
-            </div>
-            <div>
-              <div className="mb-2 block">
-                <Label htmlFor="e">Email</Label>
-              </div>
-              <TextInput id="e" value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} />
-            </div>
-            <div>
-              <div className="mb-2 block">
-                <Label htmlFor="photo">Fotoğraf</Label>
-              </div>
-              <TextInput 
-                id="photo" 
-                type="file" 
-                accept="image/*" 
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    setPhoto(file);
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                      setPhotoPreview(reader.result as string);
-                    };
-                    reader.readAsDataURL(file);
-                  }
-                }} 
-              />
-              {photoPreview && (
-                <div className="mt-2">
-                  <img src={photoPreview} alt="Preview" className="h-24 w-24 rounded object-cover" />
+                    {!loginType && (
+                        <div>
+                            <div className="mb-2 block">
+                                <Label htmlFor="e">Email</Label>
+                            </div>
+                            <TextInput
+                                id="e"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                            />
+                        </div>
+                    )}
+
+                    <div>
+                        <div className="mb-2 block">
+                            <Label htmlFor="p">Şifre</Label>
+                        </div>
+                        <TextInput
+                            id="p"
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                        />
+                    </div>
+
+                    {!loginType && (
+                        <>
+                            <div>
+                                <div className="mb-2 block">
+                                    <Label htmlFor="rp">Şifre Tekrar</Label>
+                                </div>
+                                <TextInput
+                                    id="rp"
+                                    type="password"
+                                    value={rpPassword}
+                                    onChange={(e) => setRpPassword(e.target.value)}
+                                />
+                            </div>
+
+                            <div>
+                                <div className="mb-2 block">
+                                    <Label htmlFor="photo">Profil Fotoğrafı</Label>
+                                </div>
+                                <FileInput
+                                    id="photo"
+                                    onChange={(e) => {
+                                        if (e.target.files && e.target.files[0]) {
+                                            setPhoto(e.target.files[0]);
+                                        }
+                                    }}
+                                />
+                            </div>
+
+                            <div>
+                                <div className="mb-3 block">
+                                    <Label>İlgi Alanlarınız</Label>
+                                    <p className="text-sm text-gray-500 mt-1">
+                                        İlgilendiğiniz konuları seçin ({selectedTags.length} seçildi)
+                                    </p>
+                                </div>
+
+                                {loadingTags ? (
+                                    <div className="text-center py-4">
+                                        <p className="text-gray-500">Yükleniyor...</p>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-wrap gap-2">
+                                        {availableTags.map((tag) => (
+                                            <button
+                                                key={tag.id}
+                                                type="button"
+                                                onClick={() => toggleTag(tag.id)}
+                                                className={`
+                          px-4 py-2 rounded-full text-sm font-medium
+                          transition-all duration-200 transform
+                          ${selectedTags.includes(tag.id)
+                                                        ? 'bg-blue-600 text-white scale-105 shadow-lg'
+                                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:scale-105'
+                                                    }
+                        `}
+                                            >
+                                                {selectedTags.includes(tag.id) && (
+                                                    <span className="mr-1">✓</span>
+                                                )}
+                                                {tag.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
+
+                    <div className="w-full">
+                        <Button onClick={handleSave} className="w-full">
+                            {loginType ? "Giriş Yap" : "Kaydol"}
+                        </Button>
+                    </div>
                 </div>
-              )}
-            </div>
-            <div>
-              <div className="mb-2 block">
-                <Label htmlFor="p">Şifre {profile && <span className="text-gray-500 text-sm">(Değiştirmek için doldur)</span>}</Label>
-              </div>
-              <TextInput id="p" type="password" value={password} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
-            </div>
-            <div>
-              <div className="mb-2 block">
-                <Label htmlFor="rp">Şifre Tekrar {profile && <span className="text-gray-500 text-sm">(Değiştirmek için doldur)</span>}</Label>
-              </div>
-              <TextInput id="rp" type="password" value={rpPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRpPassword(e.target.value)} />
-            </div>
-            <div>
-              <div className="mb-2 block">
-                <Label htmlFor="t">Tip</Label>
-              </div>
-              <Select id="t" value={profileTypeId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setProfileTypeId(e.target.value)}>
-                <option value="" disabled>Seçiniz</option>
-                {types.map((t) => <option key={t.id} value={t.id.toString()}>{t.name}</option>)}
-              </Select>
-            </div>
-            <div className="w-full">
-              <Button onClick={handleSave}>Kaydet</Button>
-            </div>
-          </div>
-        </ModalBody>
-      </Modal>
-    </>
-  );
-};
+            </ModalBody>
+        </Modal>
+    );
+}

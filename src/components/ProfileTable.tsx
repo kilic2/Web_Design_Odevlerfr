@@ -37,8 +37,10 @@ const ProfileTable = () => {
               <TableHeadCell>Fotoğraf</TableHeadCell>
               <TableHeadCell>Kullanıcı Adı</TableHeadCell>
               <TableHeadCell>Email</TableHeadCell>
-              <TableHeadCell>Profil Tipi</TableHeadCell>
-              <TableHeadCell>İşlemler</TableHeadCell>
+                          <TableHeadCell>Profil Tipi</TableHeadCell>
+                          <TableHeadCell>Tagler</TableHeadCell>
+                          <TableHeadCell>İşlemler</TableHeadCell>
+                          
             </TableRow>
           </TableHead>
           <TableBody>
